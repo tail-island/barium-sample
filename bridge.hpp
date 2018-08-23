@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+#include <chrono>
+
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/property_tree/json_parser.hpp>
@@ -10,15 +12,12 @@
 #include "game.hpp"
 
 namespace barys {
-  template <typename F>
   class bridge final {
     int   _turn;
     state _state;
 
-    F    _next_action;
-
   public:
-    bridge(const F& next_action) noexcept: _turn(0), _state(), _next_action(next_action) {
+    bridge() noexcept: _turn(0), _state() {
       ;
     }
 
@@ -135,7 +134,7 @@ namespace barys {
             _state = _state.next(last_action);
           }
 
-          const auto& next_action = _next_action(_state);
+          const auto& next_action = alpha_beta(_state, std::chrono::system_clock::now() + std::chrono::milliseconds(14800))();
 
           websocket_stream.write(boost::asio::buffer(encode_message(next_action)));
 
@@ -144,7 +143,6 @@ namespace barys {
         }
 
       } catch (std::exception& e) {
-        std::cerr << "error!" << std::endl;
         std::cerr << e.what() << std::endl;
       }
     }

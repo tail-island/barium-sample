@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include <immintrin.h>
+#include <intrin.h>
 
 #include <boost/container/static_vector.hpp>
 #include <boost/functional/hash.hpp>
@@ -167,6 +168,32 @@ namespace barys {
     }
 
   private:
+    auto vacant_bits() const noexcept {
+      // Visual C++ 2017の場合、accumulateだとインライン展開されませんでした。
+      // return ~boost::accumulate(pieces_on_board(), 0u, std::bit_or<std::uint32_t>());
+
+      auto result = 0u;
+
+      for (auto i = 0; i < 6; ++i) {
+        result |= pieces_on_board()[i];
+      }
+
+      return ~result;
+    }
+
+    auto enemy_vacant_bits() const noexcept {
+      // Visual C++ 2017の場合、accumulateだとインライン展開されませんでした。
+      // return ~boost::accumulate(enemy_pieces_on_board(), 0u, std::bit_or<std::uint32_t>());
+
+      auto result = 0u;
+
+      for (auto i = 0; i < 6; ++i) {
+        result |= enemy_pieces_on_board()[i];
+      }
+
+      return ~result;
+    }
+
     auto chick_allowed_bits() const noexcept {
       auto result = 0u;
 
@@ -187,16 +214,16 @@ namespace barys {
     }
 
   public:
-    auto actions() const noexcept {
+    __forceinline auto actions() const noexcept {
       auto result = boost::container::static_vector<action, 4 * 3 + 14 * 5 + 12 * 8 + 1 * 25 + 2 * 28>();
 
       // moves.
 
-      const auto& vacant_bits = ~boost::accumulate(pieces_on_board(), 0u, std::bit_or<std::uint32_t>());
+      const auto& vacant_bits = state::vacant_bits();
 
       for (auto i = 0; i < 6; ++i) {
-        for (auto piece_bits = pieces_on_board()[i]; piece_bits; piece_bits &= piece_bits - 1) {
-          for (auto control_bits = control(static_cast<piece_type>(i), _tzcnt_u32(piece_bits)) & vacant_bits; control_bits; control_bits &= control_bits - 1) {  // TODO: _blsr_u32
+        for (auto piece_bits = pieces_on_board()[i]; piece_bits; piece_bits = _blsr_u32(piece_bits)) {
+          for (auto control_bits = control(static_cast<piece_type>(i), _tzcnt_u32(piece_bits)) & vacant_bits; control_bits; control_bits = _blsr_u32(control_bits)) {
             result.emplace_back(_tzcnt_u32(piece_bits), -1, _tzcnt_u32(control_bits));
           }
         }
@@ -204,18 +231,18 @@ namespace barys {
 
       // drops.
 
-      const auto& enemy_vacant_bits  = ~boost::accumulate(enemy_pieces_on_board(), 0u, std::bit_or<std::uint32_t>());
+      const auto& enemy_vacant_bits  = state::enemy_vacant_bits();
       const auto& chick_allowed_bits = state::chick_allowed_bits();
 
       if (piece_counts_in_hand()[0]) {
-        for (auto to_bits = board_bits & vacant_bits & enemy_vacant_bits & chick_allowed_bits; to_bits; to_bits &= to_bits - 1) {  // TODO: _blsr_u32
+        for (auto to_bits = board_bits & vacant_bits & enemy_vacant_bits & chick_allowed_bits; to_bits; to_bits = _blsr_u32(to_bits)) {
           result.emplace_back(-1, 0, _tzcnt_u32(to_bits));
         }
       }
 
       for (auto i = 1; i < 3; ++i) {
         if (piece_counts_in_hand()[i]) {
-          for (auto to_bits = board_bits & vacant_bits & enemy_vacant_bits; to_bits; to_bits &= to_bits - 1) {  // TODO: _blsr_u32
+          for (auto to_bits = board_bits & vacant_bits & enemy_vacant_bits; to_bits; to_bits = _blsr_u32(to_bits)) {
             result.emplace_back(-1, i, _tzcnt_u32(to_bits));
           }
         }
@@ -256,18 +283,14 @@ namespace barys {
     }
 
   public:
-    auto next(const action& action) const noexcept {
+    __forceinline auto next(const action& action) const noexcept {
       auto next_pieces_on_board       = std::array<std::uint32_t, 6>(pieces_on_board());
       auto next_piece_counts_in_hand  = std::array<int,           4>(piece_counts_in_hand());
       auto next_enemy_pieces_on_board = std::array<std::uint32_t, 6>(enemy_pieces_on_board());
 
       if (action.from_board() >= 0) {
-        const auto& from = 1u << action.from_board();
-        const auto& to   = 1u << action.to();
-
         for (auto i = 0; i < 6; ++i) {
-          if (next_enemy_pieces_on_board[i] & to) {  // gccには、_bittestandresetがなかった……。
-            next_enemy_pieces_on_board[i] &= ~to;
+          if (_bittestandreset(static_cast<long*>(static_cast<void*>(&next_enemy_pieces_on_board[i])), action.to())) {
             next_piece_counts_in_hand[static_cast<int>(demoted(static_cast<piece_type>(i)))]++;
 
             break;
@@ -275,9 +298,8 @@ namespace barys {
         }
 
         for (auto i = 0; i < 6; ++i) {
-          if (next_pieces_on_board[i] & from) {
-            next_pieces_on_board[i] &= ~from;
-            next_pieces_on_board[to & enemy_side_bits ? static_cast<int>(promoted(static_cast<piece_type>(i))) : i] |= to;
+          if (_bittestandreset(static_cast<long*>(static_cast<void*>(&next_pieces_on_board[i])), action.from_board())) {
+            next_pieces_on_board[1u << action.to() & enemy_side_bits ? static_cast<int>(promoted(static_cast<piece_type>(i))) : i] |= 1u << action.to();
 
             break;
           }
@@ -292,61 +314,6 @@ namespace barys {
       reverse(&next_enemy_pieces_on_board);
 
       return state(next_enemy_pieces_on_board, enemy_piece_counts_in_hand(), next_pieces_on_board, next_piece_counts_in_hand);
-    }
-  };
-
-  inline auto operator==(const state& state_1, const state& state_2) noexcept {
-    for (auto i = 0; i < 6; ++i) {
-      if (state_1.pieces_on_board()[i] != state_2.pieces_on_board()[i]) {
-        return false;
-      }
-    }
-
-    for (auto i = 0; i < 6; ++i) {
-      if (state_1.enemy_pieces_on_board()[i] != state_2.enemy_pieces_on_board()[i]) {
-        return false;
-      }
-    }
-
-    for (auto i = 0; i < 4; ++i) {
-      if (state_1.piece_counts_in_hand()[i] != state_2.piece_counts_in_hand()[i]) {
-        return false;
-      }
-    }
-
-    for (auto i = 0; i < 4; ++i) {
-      if (state_1.enemy_piece_counts_in_hand()[i] != state_2.enemy_piece_counts_in_hand()[i]) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-}
-
-namespace std {
-  template <>
-  struct hash<barys::state> {
-    auto operator()(const barys::state& state) const noexcept {
-      auto result = static_cast<size_t>(0);
-
-      for (auto i = 0; i < 6; ++i) {
-        boost::hash_combine(result, state.pieces_on_board()[i]);
-      }
-
-      for (auto i = 0; i < 6; ++i) {
-        boost::hash_combine(result, state.enemy_pieces_on_board()[i]);
-      }
-
-      for (auto i = 0; i < 4; ++i) {
-        boost::hash_combine(result, state.piece_counts_in_hand()[i]);
-      }
-
-      for (auto i = 0; i < 4; ++i) {
-        boost::hash_combine(result, state.enemy_piece_counts_in_hand()[i]);
-      }
-
-      return result;
     }
   };
 }

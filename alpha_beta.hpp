@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <array>
+#include <chrono>
 
 #include <nmmintrin.h>
 
@@ -8,6 +9,15 @@
 
 namespace barys {
   class alpha_beta final {
+    const state& _state;
+    const std::chrono::system_clock::time_point& _time_limit;
+
+  public:
+    alpha_beta(const state& state, const std::chrono::system_clock::time_point& time_limit) noexcept: _state(state), _time_limit(time_limit) {
+      ;
+    }
+
+  private:
     auto board_score(const std::array<std::uint32_t, 6>& pieces_on_board) const noexcept {
       return static_cast<int>(_mm_popcnt_u32(pieces_on_board[static_cast<int>(piece_type::chick)])        *  100 +
                               _mm_popcnt_u32(pieces_on_board[static_cast<int>(piece_type::cat)])          * 1000 +
@@ -26,7 +36,11 @@ namespace barys {
       return board_score(state.pieces_on_board()) - board_score(state.enemy_pieces_on_board()) + hand_score(state.piece_counts_in_hand()) - hand_score(state.enemy_piece_counts_in_hand());
     }
 
-    auto score(const state& state, int depth, int alpha, int beta) const noexcept {
+    __forceinline auto score(const state& state, int depth, int alpha, int beta) const noexcept {
+      if (std::chrono::system_clock::now() > _time_limit) {
+        return alpha;
+      }
+
       if (state.is_end()) {
         return -100000;
       }
@@ -51,13 +65,13 @@ namespace barys {
     }
 
   public:
-    auto operator()(const state& state) const noexcept {
+    auto operator()() const noexcept {
       auto result = action();
 
       auto alpha = -1000000;
 
-      for (const auto& action: state.actions()) {
-        const auto& score = -alpha_beta::score(state.next(action), 5, -1000000, -alpha);
+      for (const auto& action: _state.actions()) {
+        const auto& score = -alpha_beta::score(_state.next(action), 7, -1000000, -alpha);
 
         if (score > alpha) {
           alpha = score;
