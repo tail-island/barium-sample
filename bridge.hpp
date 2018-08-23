@@ -134,7 +134,7 @@ namespace barys {
             _state = _state.next(last_action);
           }
 
-          const auto& next_action = alpha_beta(_state, std::chrono::system_clock::now() + std::chrono::milliseconds(14800))();
+          const auto& next_action = alpha_beta(std::chrono::system_clock::now() + std::chrono::milliseconds(14800))(_state);
 
           websocket_stream.write(boost::asio::buffer(encode_message(next_action)));
 

@@ -9,11 +9,10 @@
 
 namespace barys {
   class alpha_beta final {
-    const state& _state;
     const std::chrono::system_clock::time_point& _time_limit;
 
   public:
-    alpha_beta(const state& state, const std::chrono::system_clock::time_point& time_limit) noexcept: _state(state), _time_limit(time_limit) {
+    alpha_beta(const std::chrono::system_clock::time_point& time_limit) noexcept: _time_limit(time_limit) {
       ;
     }
 
@@ -65,13 +64,13 @@ namespace barys {
     }
 
   public:
-    auto operator()() const noexcept {
+    auto operator()(const state& state) const noexcept {
       auto result = action();
 
       auto alpha = -1000000;
 
-      for (const auto& action: _state.actions()) {
-        const auto& score = -alpha_beta::score(_state.next(action), 7, -1000000, -alpha);
+      for (const auto& action: state.actions()) {
+        const auto& score = -alpha_beta::score(state.next(action), 7, -1000000, -alpha);
 
         if (score > alpha) {
           alpha = score;
