@@ -9,10 +9,11 @@
 
 namespace barys {
   class alpha_beta final {
+    const state& _state;
     const std::chrono::system_clock::time_point& _time_limit;
 
   public:
-    alpha_beta(const std::chrono::system_clock::time_point& time_limit) noexcept: _time_limit(time_limit) {
+    alpha_beta(const state& state, const std::chrono::system_clock::time_point& time_limit) noexcept: _state(state), _time_limit(time_limit) {
       ;
     }
 
@@ -35,7 +36,7 @@ namespace barys {
       return board_score(state.pieces_on_board()) - board_score(state.enemy_pieces_on_board()) + hand_score(state.piece_counts_in_hand()) - hand_score(state.enemy_piece_counts_in_hand());
     }
 
-    __forceinline auto score(const state& state, int depth, int alpha, int beta) const noexcept {
+    auto score(const state& state, int depth, int alpha, int beta) const noexcept {
       if (std::chrono::system_clock::now() > _time_limit) {
         return alpha;
       }
@@ -64,13 +65,13 @@ namespace barys {
     }
 
   public:
-    auto operator()(const state& state) const noexcept {
+    auto operator()() const noexcept {
       auto result = action();
 
       auto alpha = -1000000;
 
-      for (const auto& action: state.actions()) {
-        const auto& score = -alpha_beta::score(state.next(action), 7, -1000000, -alpha);
+      for (const auto& action: _state.actions()) {
+        const auto& score = -alpha_beta::score(_state.next(action), 6, -1000000, -alpha);
 
         if (score > alpha) {
           alpha = score;

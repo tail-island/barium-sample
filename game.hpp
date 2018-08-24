@@ -203,7 +203,7 @@ namespace barys {
         result |= chick_bits << i;
       }
 
-      for (auto i = 5; i <= 25; i += 5) {  // ひよこの前はダメ。
+      for (auto i = 5; i <= 25; i += 5) {  // ひよこの前もダメ。
         result |= chick_bits >> i;
       }
 
@@ -276,7 +276,7 @@ namespace barys {
               reversed[piece_bits >> 24             ]);
     }
 
-    auto reverse(std::array<std::uint32_t, 6>* pieces_on_board) const noexcept {
+    __forceinline auto reverse(std::array<std::uint32_t, 6>* pieces_on_board) const noexcept {
       for (auto i = 0; i < 6; ++i) {
         pieces_on_board->data()[i] = reverse(pieces_on_board->data()[i] << 2);
       }
