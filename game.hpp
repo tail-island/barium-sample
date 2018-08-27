@@ -41,7 +41,7 @@ namespace barys {
   }
 
   static constexpr auto board_bits      = 0b00111111111111111111111111111111;
-  static constexpr auto enemy_side_bits = 0b00000000000000000000001111111111;
+  static           auto enemy_side_bits = 0b00000000000000000000001111111111;  // _bittestの引数はlong *だったので、constexprにできませんでした。
 
   inline auto control(const piece_type& piece_type, int bit) noexcept {
     static constexpr std::uint32_t piece_controls[6] = {0b00001000000000000000000000000000,
@@ -299,7 +299,7 @@ namespace barys {
 
         for (auto i = 0; i < 6; ++i) {
           if (_bittestandreset(static_cast<long*>(static_cast<void*>(&next_pieces_on_board[i])), action.from_board())) {
-            next_pieces_on_board[1u << action.to() & enemy_side_bits ? static_cast<int>(promoted(static_cast<piece_type>(i))) : i] |= 1u << action.to();
+            next_pieces_on_board[_bittest(static_cast<long*>(static_cast<void*>(&enemy_side_bits)), action.to()) ? static_cast<int>(promoted(static_cast<piece_type>(i))) : i] |= 1u << action.to();
 
             break;
           }

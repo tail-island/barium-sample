@@ -5,6 +5,8 @@
 
 #include <nmmintrin.h>
 
+#include <boost/range/algorithm.hpp>
+
 #include "game.hpp"
 
 namespace barys {
@@ -70,7 +72,7 @@ namespace barys {
 
       auto alpha = -1000000;
 
-      for (const auto& action: _state.actions()) {
+      for (const auto& action: [&]() { auto result = _state.actions(); return boost::random_shuffle(result); }()) {
         const auto& score = -alpha_beta::score(_state.next(action), 6, -1000000, -alpha);
 
         if (score > alpha) {
